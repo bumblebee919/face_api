@@ -16,6 +16,10 @@ app.add_middleware(
 # Load OpenCV face detector (or your model)
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
+@app.get("/")
+def home():
+    return {"message": "Face Detection API is running!"}
+
 @app.post("/detect")
 async def detect(file: UploadFile = File(...)):
     data = await file.read()
@@ -28,4 +32,5 @@ async def detect(file: UploadFile = File(...)):
 @app.get("/")
 def home():
     return {"message": "Face detection API is running!"}
+
 
