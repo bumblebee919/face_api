@@ -24,3 +24,8 @@ async def detect(file: UploadFile = File(...)):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     faces = face_cascade.detectMultiScale(gray, 1.1, 4)
     return {"faces_detected": len(faces)}
+
+@app.get("/")
+def home():
+    return {"message": "Face detection API is running!"}
+
