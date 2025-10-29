@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Face Check</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        text-align: center;
+        margin-top: 40px;
+      }
+      #result {
+        margin-top: 15px;
+        font-size: 18px;
+        font-weight: bold;
+      }
+      .success {
+        color: green;
+      }
+      .fail {
+        color: red;
+      }
+      video {
+        border: 2px solid #333;
+        border-radius: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>Face Detection Check</h2>
+
+    <video id="video" width="320" height="240" autoplay></video><br />
+    <button id="snap">Check Face</button>
+
+    <canvas id="canvas" width="320" height="240" style="display: none"></canvas>
+
+    <p id="result">Waiting...</p>
+
+    <script>
+      const API = "https://face-api-zr25.onrender.com/detect"; // ✅ your API endpoint
+
+      async function startCamera() {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          document.getElementById("video").srcObject = stream;
+        } catch (err) {
+          alert("Camera access denied or unavailable.");
+        }
+      }
+
+      document.getElementById("snap").onclick = async () => {
+        const video = document.getElementById("video");
+        const canvas = document.getElementById("canvas");
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(video, 0, 0, 320, 240);
+
+        document.getElementById("result").innerText = "Processing...";
+        document.getElementById("result").className = "";
+
+        canvas.toBlob(async (blob) => {
+          const formData = new FormData();
+          formData.append("file", blob, "photo.png");
+
+          try {
+            const response = await fetch(API, { method: "POST", body: formData });
+            const data = await response.json();
+
+            if (data.faces_detected > 0) {
+              document.getElementById("result").innerText = "✅ Face Detected!";
+              document.getElementById("result").className = "success";
+              // Send result to JotForm hidden field (next step)
+              window.parent.postMessage({ face_verified: true }, "*");
+            } else {
+              document.getElementById("result").innerText = "❌ No Face Detected";
+              document.getElementById("result").className = "fail";
+              window.parent.postMessage({ face_verified: false }, "*");
+            }
+          } catch (e) {
+            document.getElementById("result").innerText = "Error connecting to API.";
+            document.getElementById("result").className = "fail";
+          }
+        }, "image/png");
+      };
+
+      startCamera();
+    </script>
+  </body>
+</html>
