@@ -1,22 +1,26 @@
 # Use Python 3.10 (mediapipe supports this)
 FROM python:3.10-slim
 
-# Prevent Python from buffering stdout/stderr
+# Prevent Python output buffering
 ENV PYTHONUNBUFFERED=1
 
-# Create app folder
+# Working directory
 WORKDIR /app
 
-# Copy dependency list
-COPY requirements.txt .
+# Install system dependencies (fixes libGL error)
+RUN apt-get update && apt-get install -y \
+    libgl1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install dependencies
+# Copy and install Python dependencies
+COPY requirements.txt .
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
-# Copy your source code
+# Copy app code
 COPY . .
 
-# Expose Render port
+# Set Render environment variable
 ENV PORT=10000
 
 # Start the FastAPI app
