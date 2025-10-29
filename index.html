@@ -37,52 +37,94 @@
     <p id="result">Waiting...</p>
 
     <script>
-      const API = "https://face-api-zr25.onrender.com/detect"; // ✅ your API endpoint
+const API = "https://face-api-zr25.onrender.com/analyze"; // your live analyze endpoint
 
-      async function startCamera() {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-          document.getElementById("video").srcObject = stream;
-        } catch (err) {
-          alert("Camera access denied or unavailable.");
-        }
-      }
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const resultP = document.getElementById('result');
 
-      document.getElementById("snap").onclick = async () => {
-        const video = document.getElementById("video");
-        const canvas = document.getElementById("canvas");
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(video, 0, 0, 320, 240);
+let sampling = false;
+let intervalMs = 800; // send frame every 800ms
+let earHistory = [];   // keep last N ear values
+let marHistory = [];
+const HISTORY_LEN = 5;
 
-        document.getElementById("result").innerText = "Processing...";
-        document.getElementById("result").className = "";
+// helper: post message to parent
+function postState(stateObj) {
+  window.parent.postMessage({ source: 'face-check', ...stateObj }, '*');
+}
 
-        canvas.toBlob(async (blob) => {
-          const formData = new FormData();
-          formData.append("file", blob, "photo.png");
+async function sendFrameAndAnalyze() {
+  if (!video.srcObject) return;
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.8));
+  if (!blob) return;
+  const fd = new FormData();
+  fd.append('file', blob, 'frame.png');
 
-          try {
-            const response = await fetch(API, { method: "POST", body: formData });
-            const data = await response.json();
+  try {
+    const resp = await fetch(API, { method: 'POST', body: fd });
+    if (!resp.ok) throw new Error('Network');
+    const data = await resp.json();
+    // maintain history
+    earHistory.push(data.ear || 0);
+    if (earHistory.length > HISTORY_LEN) earHistory.shift();
+    marHistory.push(data.mar || 0);
+    if (marHistory.length > HISTORY_LEN) marHistory.shift();
 
-            if (data.faces_detected > 0) {
-              document.getElementById("result").innerText = "✅ Face Detected!";
-              document.getElementById("result").className = "success";
-              // Send result to JotForm hidden field (next step)
-              window.parent.postMessage({ face_verified: true }, "*");
-            } else {
-              document.getElementById("result").innerText = "❌ No Face Detected";
-              document.getElementById("result").className = "fail";
-              window.parent.postMessage({ face_verified: false }, "*");
-            }
-          } catch (e) {
-            document.getElementById("result").innerText = "Error connecting to API.";
-            document.getElementById("result").className = "fail";
-          }
-        }, "image/png");
-      };
+    // compute smoothed values
+    const earAvg = earHistory.reduce((a,b)=>a+b,0)/earHistory.length;
+    const marAvg = marHistory.reduce((a,b)=>a+b,0)/marHistory.length;
 
-      startCamera();
-    </script>
+    // simple temporal rules
+    const SLEEP_EAR_THRESHOLD = 0.18;
+    const TALK_MAR_THRESHOLD = 0.045;
+
+    let state = 'ok';
+    if (earAvg < SLEEP_EAR_THRESHOLD && earHistory.length >= 3) {
+      state = 'sleeping';
+    } else if (marAvg > TALK_MAR_THRESHOLD) {
+      state = 'talking';
+    } else if (!data.id_found) {
+      state = 'no_id';
+    } else {
+      state = 'ok';
+    }
+
+    // present friendly text
+    let text = '';
+    if (state === 'sleeping') text = 'Sleeping / eyes closed';
+    else if (state === 'talking') text = 'Talking / mouth active';
+    else if (state === 'no_id') text = 'ID not visible';
+    else text = 'OK (awake, id present)';
+
+    resultP.innerText = text;
+    // send to parent
+    postState({ state, earAvg, marAvg, id_found: data.id_found });
+
+  } catch (err) {
+    resultP.innerText = 'Error analyzing frame';
+    console.error(err);
+  }
+}
+
+async function startLoop() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    video.srcObject = stream;
+    sampling = true;
+    // start periodic sends
+    setInterval(() => {
+      if (sampling) sendFrameAndAnalyze();
+    }, intervalMs);
+  } catch (e) {
+    alert('Camera access required.');
+  }
+}
+
+startLoop();
+</script>
   </body>
 </html>
+
