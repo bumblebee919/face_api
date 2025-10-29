@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 import cv2
@@ -29,8 +30,11 @@ async def detect(file: UploadFile = File(...)):
     faces = face_cascade.detectMultiScale(gray, 1.1, 4)
     return {"faces_detected": len(faces)}
 
-@app.get("/")
-def home():
-    return {"message": "Face detection API is running!"}
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run("face_api:app", host="0.0.0.0", port=port)
+
+
 
 
