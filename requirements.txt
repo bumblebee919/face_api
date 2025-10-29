@@ -4,3 +4,5 @@ python-multipart
 opencv-python
 numpy
 requests
+mediapipe
+
